@@ -5,10 +5,13 @@ class DataService {
   private currentUser: User | null = null;
 
   async initialize(): Promise<void> {
-    // Recover session if exists in local storage (client-side cache of user details)
     const stored = localStorage.getItem('rc_current_user');
     if (stored) {
-      this.currentUser = JSON.parse(stored);
+      try {
+        this.currentUser = JSON.parse(stored);
+      } catch (e) {
+        localStorage.removeItem('rc_current_user');
+      }
     }
   }
 
@@ -19,19 +22,18 @@ class DataService {
       .from('users')
       .select('*')
       .eq('username', username)
-      .single();
+      .maybeSingle();
 
     if (error) {
-       console.error("Login error:", error);
-       // If row not found
-       if (error.code === 'PGRST116') return null;
-       throw new Error(error.message);
+       console.error("Login DB Error:", error);
+       throw new Error("Database connection failed");
     }
+
+    if (!data) return null;
 
     if (data.isBlocked) throw new Error("Account blocked by administrator.");
     
-    // Note: In a real production app, use Supabase Auth (GoTrue) instead of storing passwords in a table.
-    // This maintains compatibility with the existing simplistic type structure.
+    // Simple password check (Note: Use Supabase Auth in production)
     if (data.password !== password) return null;
 
     this.currentUser = data;
@@ -41,27 +43,25 @@ class DataService {
 
   async register(user: Omit<User, 'id' | 'isBlocked'>): Promise<User> {
     // 1. Check if username exists
-    const { data: existing } = await supabase
+    const { data: existing, error: checkError } = await supabase
       .from('users')
       .select('username')
       .eq('username', user.username)
       .maybeSingle();
+
+    if (checkError) {
+        console.error("Check user error:", checkError);
+        throw new Error("Could not verify username availability.");
+    }
 
     if (existing) {
       throw new Error("Username is already taken");
     }
 
     // 2. Insert new user
-    // We explicitly set isBlocked false. Supabase can generate the ID if we omit it, 
-    // or we can generate one. Let's rely on DB default or generate one if needed.
-    // We will assume the DB handles ID generation (uuid) or we send one.
-    // To match previous logic, let's generate a string ID or let the table default to uuid.
-    // Here we let supabase return the created row.
-    
     const payload = {
       ...user,
       isBlocked: false,
-      // Ensure we don't send undefined for optional fields to avoid DB constraint issues if any
       links: user.links || {},
       focusAreas: user.focusAreas || [],
       skills: user.skills || [],
@@ -75,8 +75,8 @@ class DataService {
       .single();
 
     if (error) {
-      console.error("Register error:", error);
-      throw error;
+      console.error("Register Error details:", error);
+      throw new Error(`Registration failed: ${error.message}`);
     }
 
     this.currentUser = data;
@@ -99,12 +99,16 @@ class DataService {
     if (!this.currentUser) return [];
 
     // 1. Get IDs I have already swiped
+    // Note: We use quoted identifiers in SQL, so select("targetId") should map correctly if table was created with quotes
     const { data: swipes, error: swipeError } = await supabase
       .from('swipes')
       .select('targetId')
       .eq('actorId', this.currentUser.id);
     
-    if (swipeError) throw swipeError;
+    if (swipeError) {
+        console.error("Error fetching swipes:", swipeError);
+        // Fail gracefully by assuming no swipes
+    }
 
     const swipedIds = swipes?.map((s: any) => s.targetId) || [];
     swipedIds.push(this.currentUser.id); // Exclude self
@@ -129,17 +133,11 @@ class DataService {
       .neq('type', UserType.ADMIN)
       .in('type', targetTypes);
 
-    // Note: Supabase .not('id', 'in', ...) can be tricky with large lists.
-    // For a prototype, fetching and filtering client side is okay, but let's try to filter strictly.
-    // If swipedIds is huge, this query might fail. For now it's fine.
-    if (swipedIds.length > 0) {
-        // 'not.in' expects a comma separated list or array
-        // We handle this by filtering in JS to avoid URL length limits if list is huge,
-        // or usage of a stored procedure. For this size, JS filter is safest/easiest.
-    }
-
     const { data: candidates, error: userError } = await query;
-    if (userError) throw userError;
+    if (userError) {
+        console.error("Error fetching potentials:", userError);
+        throw userError;
+    }
 
     let results = candidates || [];
     
@@ -148,8 +146,6 @@ class DataService {
 
     // Filter by Focus Area
     if (filterFocusArea) {
-      // Assuming focusAreas is stored as JSONB or Array. 
-      // If JSONB: results.filter...
       results = results.filter((u: User) => u.focusAreas && u.focusAreas.includes(filterFocusArea));
     }
 
@@ -168,7 +164,10 @@ class DataService {
         action: action
       });
     
-    if (insertError) throw insertError;
+    if (insertError) {
+        console.error("Swipe insert error:", insertError);
+        throw insertError;
+    }
 
     if (action === 'pass') return null;
 
@@ -179,7 +178,7 @@ class DataService {
       .eq('actorId', targetId)
       .eq('targetId', this.currentUser.id)
       .eq('action', 'like')
-      .single();
+      .maybeSingle();
 
     if (reciprocal) {
       // 3. Create Match
@@ -204,14 +203,15 @@ class DataService {
   async getMatches(): Promise<{ match: Match, otherUser: User }[]> {
     if (!this.currentUser) return [];
 
-    // Fetches matches where current user is in the users array
-    // Supabase Postgres: "users" @> '[myId]'
     const { data: matches, error } = await supabase
       .from('matches')
       .select('*')
       .contains('users', [this.currentUser.id]);
 
-    if (error) throw error;
+    if (error) {
+        console.error("Get matches error:", error);
+        return [];
+    }
     if (!matches) return [];
 
     const results: { match: Match, otherUser: User }[] = [];
@@ -219,7 +219,6 @@ class DataService {
     for (const m of matches) {
       const otherId = m.users.find((id: string) => id !== this.currentUser!.id);
       if (otherId) {
-        // Fetch other user details
         const { data: otherUser } = await supabase
           .from('users')
           .select('*')
@@ -238,14 +237,16 @@ class DataService {
   async getConversation(partnerId: string): Promise<Message[]> {
     if (!this.currentUser) return [];
     
-    // OR query: (sender=me AND receiver=them) OR (sender=them AND receiver=me)
     const { data, error } = await supabase
       .from('messages')
       .select('*')
       .or(`and(senderId.eq.${this.currentUser.id},receiverId.eq.${partnerId}),and(senderId.eq.${partnerId},receiverId.eq.${this.currentUser.id})`)
       .order('timestamp', { ascending: true });
 
-    if (error) throw error;
+    if (error) {
+        console.error("Get conversation error:", error);
+        return [];
+    }
     return data || [];
   }
 
@@ -277,7 +278,6 @@ class DataService {
   }
 
   async toggleBlock(userId: string): Promise<void> {
-    // First get current status
     const { data: user } = await supabase.from('users').select('isBlocked').eq('id', userId).single();
     if (!user) return;
 
@@ -289,8 +289,6 @@ class DataService {
 
   async deleteUser(userId: string): Promise<void> {
     await supabase.from('users').delete().eq('id', userId);
-    // Note: In real DB, cascading deletes on FKs would handle swipes/matches/messages
-    // For this simple setup, we might leave orphans or delete manually
     await supabase.from('swipes').delete().or(`actorId.eq.${userId},targetId.eq.${userId}`);
     await supabase.from('matches').delete().contains('users', [userId]);
     await supabase.from('messages').delete().or(`senderId.eq.${userId},receiverId.eq.${userId}`);

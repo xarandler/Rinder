@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { dataService } from '../services/dataService';
-import { User, Message } from '../types';
+import { User, Message, Match } from '../types';
 import { Send, ArrowLeft } from 'lucide-react';
 
 interface ChatInterfaceProps {
@@ -8,38 +8,51 @@ interface ChatInterfaceProps {
 }
 
 export const ChatInterface: React.FC<ChatInterfaceProps> = ({ onBack }) => {
-  const [matches, setMatches] = useState(dataService.getMatches());
+  const [matches, setMatches] = useState<{ match: Match, otherUser: User }[]>([]);
   const [selectedMatchId, setSelectedMatchId] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const bottomRef = useRef<HTMLDivElement>(null);
+
+  // Load matches on mount
+  useEffect(() => {
+    dataService.getMatches().then(setMatches);
+  }, []);
 
   const activePartner = selectedMatchId 
     ? matches.find(m => m.otherUser.id === selectedMatchId)?.otherUser 
     : null;
 
   useEffect(() => {
+    let interval: any;
+    
     if (selectedMatchId) {
-      setMessages(dataService.getConversation(selectedMatchId));
-      // Poll for messages in this mock environment (since we don't have sockets)
-      const interval = setInterval(() => {
-         setMessages(dataService.getConversation(selectedMatchId));
-      }, 1000);
-      return () => clearInterval(interval);
+      // Initial fetch
+      dataService.getConversation(selectedMatchId).then(setMessages);
+      
+      // Polling for new messages every 3 seconds
+      interval = setInterval(() => {
+         dataService.getConversation(selectedMatchId).then(setMessages);
+      }, 3000);
     }
+    
+    return () => clearInterval(interval);
   }, [selectedMatchId]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  const handleSend = (e: React.FormEvent) => {
+  const handleSend = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!input.trim() || !selectedMatchId) return;
     
-    dataService.sendMessage(selectedMatchId, input);
-    setMessages(dataService.getConversation(selectedMatchId));
-    setInput('');
+    const content = input;
+    setInput(''); // Optimistic clear
+
+    await dataService.sendMessage(selectedMatchId, content);
+    const updated = await dataService.getConversation(selectedMatchId);
+    setMessages(updated);
   };
 
   return (

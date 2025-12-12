@@ -27,16 +27,16 @@ const App: React.FC = () => {
   const [matchNotification, setMatchNotification] = useState<any>(null);
 
   useEffect(() => {
-    // Initialize data from JSON file
     dataService.initialize().then(() => {
         setLoading(false);
     });
   }, []);
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
+    setLoginError('');
     try {
-      const user = dataService.login(username, password);
+      const user = await dataService.login(username, password);
       if (user) {
         setCurrentUser(user);
         if (user.type === UserType.ADMIN) {
@@ -44,7 +44,6 @@ const App: React.FC = () => {
         } else {
           setView(View.SWIPE);
         }
-        setLoginError('');
       } else {
         setLoginError('Invalid credentials');
       }
@@ -101,11 +100,11 @@ const App: React.FC = () => {
               placeholder="e.g. alice"
             />
             <Input 
-              label="Password (optional)" 
+              label="Password" 
               type="password"
               value={password} 
               onChange={e => setPassword(e.target.value)} 
-              placeholder="For admin use 'pass'"
+              placeholder="e.g. pass"
             />
             
             {loginError && <p className="text-red-500 text-sm text-center">{loginError}</p>}
@@ -128,7 +127,6 @@ const App: React.FC = () => {
           
           <div className="mt-6 text-center text-xs text-slate-400">
             <p>Admin Login: admin / pass</p>
-            <p>Demo Users: c1, r1</p>
           </div>
         </div>
       </div>

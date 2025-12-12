@@ -13,6 +13,7 @@ interface RegisterProps {
 
 export const Register: React.FC<RegisterProps> = ({ onSuccess, onCancel }) => {
   const [step, setStep] = useState(1);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [formData, setFormData] = useState<Partial<User>>({
     type: UserType.COMPANY,
     focusAreas: [],
@@ -39,9 +40,12 @@ export const Register: React.FC<RegisterProps> = ({ onSuccess, onCancel }) => {
     }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSubmitting) return;
+
     try {
+        setIsSubmitting(true);
         // Basic validation mock
         if (!formData.username || !formData.name || !formData.description) return;
         
@@ -50,7 +54,7 @@ export const Register: React.FC<RegisterProps> = ({ onSuccess, onCancel }) => {
             ? `https://picsum.photos/400/400?random=${Date.now()}`
             : `https://picsum.photos/400/400?random=${Date.now()}`;
         
-        dataService.register({
+        await dataService.register({
             ...formData as any,
             imageUrl: img,
             projects: formData.projects ? (formData.projects as any).split(',').map((s:string)=>s.trim()) : [],
@@ -58,7 +62,8 @@ export const Register: React.FC<RegisterProps> = ({ onSuccess, onCancel }) => {
         });
         onSuccess();
     } catch (err) {
-        alert("Registration failed");
+        alert("Registration failed. Username might be taken.");
+        setIsSubmitting(false);
     }
   };
 
@@ -99,9 +104,17 @@ export const Register: React.FC<RegisterProps> = ({ onSuccess, onCancel }) => {
                 onChange={e => handleChange('username', e.target.value)} 
                 placeholder="Choose a unique username"
             />
+            
+            <Input 
+                label="Password" 
+                type="password"
+                value={formData.password || ''} 
+                onChange={e => handleChange('password', e.target.value)} 
+                placeholder="Create a password"
+            />
 
             <Button fullWidth onClick={() => {
-                if (formData.username) setStep(2);
+                if (formData.username && formData.password) setStep(2);
             }}>Next</Button>
             <Button variant="ghost" fullWidth onClick={onCancel} className="mt-2">Cancel</Button>
         </div>
@@ -183,7 +196,9 @@ export const Register: React.FC<RegisterProps> = ({ onSuccess, onCancel }) => {
 
             <div className="flex gap-2 pt-4">
                 <Button variant="secondary" onClick={() => setStep(1)} className="flex-1">Back</Button>
-                <Button type="submit" className="flex-1">Complete Profile</Button>
+                <Button type="submit" className="flex-1" disabled={isSubmitting}>
+                    {isSubmitting ? 'Creating...' : 'Complete Profile'}
+                </Button>
             </div>
           </form>
       )}

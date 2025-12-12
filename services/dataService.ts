@@ -1,122 +1,81 @@
-import { User, UserType, Match, Message, SwipeAction } from '../types';
+import { supabase } from './supabaseClient';
+import { User, UserType, Match, Message } from '../types';
+
+// Helper to map Snake_Case DB columns to CamelCase App properties
+const mapUser = (dbUser: any): User => ({
+  id: dbUser.id.toString(),
+  username: dbUser.username,
+  password: dbUser.password,
+  type: dbUser.type as UserType,
+  name: dbUser.name,
+  tagline: dbUser.tagline,
+  description: dbUser.description,
+  focusAreas: dbUser.focus_areas || [],
+  skills: dbUser.skills || [],
+  projects: dbUser.projects || [],
+  imageUrl: dbUser.image_url,
+  links: dbUser.links || {},
+  isBlocked: dbUser.is_blocked
+});
 
 class DataService {
-  private users: User[] = [];
-  private swipes: SwipeAction[] = [];
-  private matches: Match[] = [];
-  private messages: Message[] = [];
   private currentUser: User | null = null;
-  private initialized = false;
-
-  constructor() {
-    this.loadState();
-  }
-
-  // Persist state to local storage (Simulation of DB write)
-  private saveState() {
-    // We only save 'dynamic' data to local storage. 
-    // New registered users are saved to 'custom_users'.
-    // Blocked status is saved to 'blocked_users'.
-    // Swipes and matches are saved.
-    
-    // In a real file-system app, we would write to users.json here.
-    // Since browsers can't write to disk, we use LocalStorage to simulate persistence for new users.
-    localStorage.setItem('rc_swipes', JSON.stringify(this.swipes));
-    localStorage.setItem('rc_matches', JSON.stringify(this.matches));
-    localStorage.setItem('rc_messages', JSON.stringify(this.messages));
-  }
-
-  private loadState() {
-    const s = localStorage.getItem('rc_swipes');
-    if (s) this.swipes = JSON.parse(s);
-    
-    const m = localStorage.getItem('rc_matches');
-    if (m) this.matches = JSON.parse(m);
-
-    const msg = localStorage.getItem('rc_messages');
-    if (msg) this.messages = JSON.parse(msg);
-  }
 
   async initialize(): Promise<void> {
-    if (this.initialized) return;
-
-    try {
-      // 1. Fetch the external database (JSON file)
-      const response = await fetch('/users.json');
-      if (!response.ok) throw new Error('Failed to load user database');
-      const fileUsers: User[] = await response.json();
-
-      // 2. Load locally registered users (Simulation of writing to DB)
-      const localUsersJson = localStorage.getItem('rc_custom_users');
-      const localUsers: User[] = localUsersJson ? JSON.parse(localUsersJson) : [];
-
-      // 3. Load blocked status overrides
-      const blockedIdsJson = localStorage.getItem('rc_blocked_ids');
-      const blockedIds: string[] = blockedIdsJson ? JSON.parse(blockedIdsJson) : [];
-      const blockedSet = new Set(blockedIds);
-
-      // 4. Merge
-      // Start with file users, then add local users.
-      // If a user exists in both, local takes precedence (simple update logic) or we append.
-      // Here we assume IDs are unique enough or valid.
-      
-      const mergedUsers = [...fileUsers];
-      
-      localUsers.forEach(lu => {
-         const existingIndex = mergedUsers.findIndex(u => u.id === lu.id);
-         if (existingIndex >= 0) {
-             mergedUsers[existingIndex] = lu;
-         } else {
-             mergedUsers.push(lu);
-         }
-      });
-
-      // Apply blocked status
-      this.users = mergedUsers.map(u => ({
-          ...u,
-          isBlocked: blockedSet.has(u.id) ? true : u.isBlocked
-      }));
-
-      this.initialized = true;
-    } catch (e) {
-      console.error("Initialization error:", e);
-      // Fallback empty if file missing
-      this.users = []; 
-      this.initialized = true;
-    }
+    // Optional: Check for existing session if using Supabase Auth
+    // For this simple version, we stick to the custom login flow
+    return Promise.resolve();
   }
 
-  // Auth
-  login(username: string, password?: string): User | null {
-    const user = this.users.find(u => u.username === username);
-    if (!user) return null;
-    if (user.isBlocked) throw new Error("Account blocked by administrator.");
+  // --- Auth ---
+
+  async login(username: string, password?: string): Promise<User | null> {
+    // Fetch user from DB
+    const { data, error } = await supabase
+      .from('users')
+      .select('*')
+      .eq('username', username)
+      .single();
+
+    if (error || !data) return null;
     
-    // Simple password check for admin
-    if (user.type === UserType.ADMIN) {
-      if (password !== user.password) return null;
-    }
-    
+    // Check block status
+    if (data.is_blocked) throw new Error("Account blocked by administrator.");
+
+    // Simple password check (In production, use Supabase Auth or Hash)
+    if (data.password && data.password !== password) return null;
+
+    const user = mapUser(data);
     this.currentUser = user;
     return user;
   }
 
-  register(user: Omit<User, 'id' | 'isBlocked'>): User {
-    const newUser: User = {
-      ...user,
-      id: Math.random().toString(36).substr(2, 9),
-      isBlocked: false
+  async register(user: Omit<User, 'id' | 'isBlocked'>): Promise<User> {
+    const dbUser = {
+      username: user.username,
+      password: user.password || 'pass', // Default simple pass
+      type: user.type,
+      name: user.name,
+      tagline: user.tagline,
+      description: user.description,
+      focus_areas: user.focusAreas,
+      skills: user.skills,
+      projects: user.projects,
+      image_url: user.imageUrl,
+      links: user.links,
+      is_blocked: false
     };
-    
-    this.users.push(newUser);
-    this.currentUser = newUser;
-    
-    // Persist new user to local storage
-    const localUsersJson = localStorage.getItem('rc_custom_users');
-    const localUsers: User[] = localUsersJson ? JSON.parse(localUsersJson) : [];
-    localUsers.push(newUser);
-    localStorage.setItem('rc_custom_users', JSON.stringify(localUsers));
 
+    const { data, error } = await supabase
+      .from('users')
+      .insert([dbUser])
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    const newUser = mapUser(data);
+    this.currentUser = newUser;
     return newUser;
   }
 
@@ -128,154 +87,201 @@ class DataService {
     return this.currentUser;
   }
 
-  // Matching Logic
-  getPotentials(filterFocusArea?: string, targetType?: UserType): User[] {
+  // --- Matching ---
+
+  async getPotentials(filterFocusArea?: string, targetTypePreference?: UserType): Promise<User[]> {
     if (!this.currentUser) return [];
 
-    // Filter out users already swiped
-    const swipedIds = new Set(
-      this.swipes
-        .filter(s => s.actorId === this.currentUser?.id)
-        .map(s => s.targetId)
-    );
+    // 1. Get IDs I have already swiped
+    const { data: swipes } = await supabase
+      .from('swipes')
+      .select('target_id')
+      .eq('actor_id', this.currentUser.id);
 
-    let candidates = this.users.filter(u => 
-      u.id !== this.currentUser?.id && 
-      !u.isBlocked &&
-      !swipedIds.has(u.id) &&
-      u.type !== UserType.ADMIN
-    );
+    const swipedIds = swipes?.map(s => s.target_id) || [];
+    swipedIds.push(this.currentUser.id); // Exclude self
 
-    // Type Logic
+    // 2. Determine target type
+    let lookingFor: UserType[] = [];
     if (this.currentUser.type === UserType.COMPANY) {
-      // Companies only see Researchers
-      candidates = candidates.filter(u => u.type === UserType.RESEARCHER);
-    } else if (this.currentUser.type === UserType.RESEARCHER) {
-      if (targetType) {
-        // Explicit choice by researcher
-        candidates = candidates.filter(u => u.type === targetType);
+      lookingFor = [UserType.RESEARCHER];
+    } else {
+      // Researcher
+      if (targetTypePreference) {
+        lookingFor = [targetTypePreference];
       } else {
-        // Fallback: Researchers see Companies AND other Researchers if no specific target set
-        candidates = candidates.filter(u => 
-          u.type === UserType.COMPANY || u.type === UserType.RESEARCHER
-        );
+        lookingFor = [UserType.COMPANY, UserType.RESEARCHER];
       }
     }
 
-    // Filter Logic
+    // 3. Build Query
+    let query = supabase
+      .from('users')
+      .select('*')
+      .neq('type', UserType.ADMIN)
+      .eq('is_blocked', false)
+      .in('type', lookingFor);
+
+    // 4. Execute to get candidates
+    const { data: candidates, error } = await query;
+    if (error) return [];
+
+    let results = candidates.map(mapUser);
+
+    // 5. Filter swiped IDs (Supabase .not('id', 'in', arr) fails on empty arrays sometimes, safer to filter in JS for MVP)
+    results = results.filter(u => !swipedIds.includes(u.id));
+
+    // 6. Filter Focus Area
     if (filterFocusArea) {
-      candidates = candidates.filter(u => u.focusAreas.includes(filterFocusArea));
+      results = results.filter(u => u.focusAreas.includes(filterFocusArea));
     }
 
-    // Shuffle simple
-    return candidates.sort(() => Math.random() - 0.5);
+    // Shuffle
+    return results.sort(() => Math.random() - 0.5);
   }
 
-  swipe(targetId: string, action: 'like' | 'pass'): Match | null {
+  async swipe(targetId: string, action: 'like' | 'pass'): Promise<Match | null> {
     if (!this.currentUser) return null;
 
-    this.swipes.push({
-      actorId: this.currentUser.id,
-      targetId,
-      action
+    // 1. Record Swipe
+    await supabase.from('swipes').insert({
+      actor_id: this.currentUser.id,
+      target_id: targetId,
+      action: action
     });
 
-    let matchResult: Match | null = null;
+    if (action === 'pass') return null;
 
-    if (action === 'like') {
-      // Check for match
-      const isMatch = this.swipes.some(s => 
-        s.actorId === targetId && 
-        s.targetId === this.currentUser!.id && 
-        s.action === 'like'
-      );
+    // 2. Check for Match (Did they like me?)
+    const { data: reciprocal } = await supabase
+      .from('swipes')
+      .select('*')
+      .eq('actor_id', targetId)
+      .eq('target_id', this.currentUser.id)
+      .eq('action', 'like')
+      .single();
 
-      if (isMatch) {
-        const newMatch: Match = {
-          id: Math.random().toString(36).substr(2, 9),
-          users: [this.currentUser.id, targetId],
+    if (reciprocal) {
+      // It's a match!
+      const { data: newMatch } = await supabase
+        .from('matches')
+        .insert({
+          user1_id: this.currentUser.id,
+          user2_id: targetId,
           timestamp: Date.now()
-        };
-        this.matches.push(newMatch);
-        matchResult = newMatch;
+        })
+        .select()
+        .single();
+        
+       if (newMatch) {
+           return {
+               id: newMatch.id,
+               users: [this.currentUser.id, targetId],
+               timestamp: newMatch.timestamp
+           };
+       }
+    }
+
+    return null;
+  }
+
+  // --- Chat ---
+
+  async getMatches(): Promise<{ match: Match, otherUser: User }[]> {
+    if (!this.currentUser) return [];
+
+    // Fetch matches where I am user1 or user2
+    const { data: matches, error } = await supabase
+      .from('matches')
+      .select('*')
+      .or(`user1_id.eq.${this.currentUser.id},user2_id.eq.${this.currentUser.id}`);
+
+    if (error || !matches) return [];
+
+    const results: { match: Match, otherUser: User }[] = [];
+
+    for (const m of matches) {
+      const otherId = m.user1_id === this.currentUser.id ? m.user2_id : m.user1_id;
+      
+      // Fetch the other user's details
+      const { data: otherUserData } = await supabase
+        .from('users')
+        .select('*')
+        .eq('id', otherId)
+        .single();
+
+      if (otherUserData) {
+        results.push({
+          match: {
+            id: m.id,
+            users: [m.user1_id, m.user2_id],
+            timestamp: m.timestamp
+          },
+          otherUser: mapUser(otherUserData)
+        });
       }
     }
-    
-    this.saveState();
-    return matchResult;
+
+    return results;
   }
 
-  // Chat
-  getMatches(): { match: Match, otherUser: User }[] {
+  async getConversation(partnerId: string): Promise<Message[]> {
     if (!this.currentUser) return [];
-    
-    const myMatches = this.matches.filter(m => m.users.includes(this.currentUser!.id));
-    
-    return myMatches.map(m => {
-      const otherId = m.users.find(id => id !== this.currentUser!.id)!;
-      // Handle case where user might be deleted or missing
-      const otherUser = this.users.find(u => u.id === otherId);
-      if (!otherUser) return null;
-      return { match: m, otherUser };
-    }).filter(item => item !== null) as { match: Match, otherUser: User }[];
+
+    const { data, error } = await supabase
+      .from('messages')
+      .select('*')
+      .or(`and(sender_id.eq.${this.currentUser.id},receiver_id.eq.${partnerId}),and(sender_id.eq.${partnerId},receiver_id.eq.${this.currentUser.id})`)
+      .order('timestamp', { ascending: true });
+
+    if (error || !data) return [];
+
+    return data.map(m => ({
+        id: m.id,
+        senderId: m.sender_id,
+        receiverId: m.receiver_id,
+        content: m.content,
+        timestamp: m.timestamp
+    }));
   }
 
-  getMessages(matchId: string): Message[] {
-     // Placeholder
-    return [];
-  }
-
-  // Refined get messages
-  getConversation(partnerId: string): Message[] {
-    if (!this.currentUser) return [];
-    return this.messages.filter(m => 
-      (m.senderId === this.currentUser!.id && m.receiverId === partnerId) ||
-      (m.senderId === partnerId && m.receiverId === this.currentUser!.id)
-    ).sort((a,b) => a.timestamp - b.timestamp);
-  }
-
-  sendMessage(receiverId: string, content: string) {
+  async sendMessage(receiverId: string, content: string): Promise<void> {
     if (!this.currentUser) return;
-    this.messages.push({
-      id: Math.random().toString(36).substr(2, 9),
-      senderId: this.currentUser.id,
-      receiverId,
-      content,
+
+    await supabase.from('messages').insert({
+      sender_id: this.currentUser.id,
+      receiver_id: receiverId,
+      content: content,
       timestamp: Date.now()
     });
-    this.saveState();
   }
 
-  // Admin
-  getAllUsers(): User[] {
-    return this.users.filter(u => u.type !== UserType.ADMIN);
+  // --- Admin ---
+
+  async getAllUsers(): Promise<User[]> {
+    const { data } = await supabase
+      .from('users')
+      .select('*')
+      .neq('type', UserType.ADMIN);
+      
+    return data ? data.map(mapUser) : [];
   }
 
-  toggleBlock(userId: string) {
-    const user = this.users.find(u => u.id === userId);
-    if (user) {
-      user.isBlocked = !user.isBlocked;
-      
-      // Persist blocked state
-      const blockedIdsJson = localStorage.getItem('rc_blocked_ids');
-      const blockedIds: string[] = blockedIdsJson ? JSON.parse(blockedIdsJson) : [];
-      
-      if (user.isBlocked) {
-          if (!blockedIds.includes(userId)) blockedIds.push(userId);
-      } else {
-          const idx = blockedIds.indexOf(userId);
-          if (idx > -1) blockedIds.splice(idx, 1);
-      }
-      localStorage.setItem('rc_blocked_ids', JSON.stringify(blockedIds));
+  async toggleBlock(userId: string): Promise<void> {
+    // First get current status
+    const { data } = await supabase.from('users').select('is_blocked').eq('id', userId).single();
+    if (data) {
+        await supabase
+            .from('users')
+            .update({ is_blocked: !data.is_blocked })
+            .eq('id', userId);
     }
   }
 
-  deleteUser(userId: string) {
-    this.users = this.users.filter(u => u.id !== userId);
-    // Cleanup matches
-    this.matches = this.matches.filter(m => !m.users.includes(userId));
-    this.swipes = this.swipes.filter(s => s.actorId !== userId && s.targetId !== userId);
-    this.saveState();
+  async deleteUser(userId: string): Promise<void> {
+    await supabase.from('users').delete().eq('id', userId);
+    // Supabase cascading delete should handle foreign keys if configured, 
+    // otherwise we technically should delete swipes/matches first.
   }
 }
 

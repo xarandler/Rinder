@@ -17,44 +17,46 @@ export const SwipeDeck: React.FC<SwipeDeckProps> = ({ onMatch }) => {
   const [direction, setDirection] = useState<'left' | 'right' | null>(null);
   const [filter, setFilter] = useState<string>('');
   
-  // State for Researchers to choose who they are looking for.
-  // Default to finding Companies.
   const [targetType, setTargetType] = useState<UserType>(UserType.COMPANY);
-  
   const [loading, setLoading] = useState(true);
 
-  const fetchCandidates = () => {
+  const fetchCandidates = async () => {
     setLoading(true);
-    // Simulate network delay for effect
-    setTimeout(() => {
-      // Pass the targetType preference to the data service
-      const data = dataService.getPotentials(filter || undefined, targetType);
+    try {
+      const data = await dataService.getPotentials(filter || undefined, targetType);
       setCandidates(data);
       setCurrentIndex(0);
+    } catch (e) {
+      console.error(e);
+    } finally {
       setLoading(false);
-    }, 400);
+    }
   };
 
   useEffect(() => {
     fetchCandidates();
-  }, [filter, targetType]); // Refetch when filter or target type changes
+  }, [filter, targetType]); 
 
-  const handleSwipe = (action: 'like' | 'pass') => {
-    const currentUser = candidates[currentIndex];
-    if (!currentUser) return;
+  const handleSwipe = async (action: 'like' | 'pass') => {
+    const targetUser = candidates[currentIndex];
+    if (!targetUser) return;
 
     setDirection(action === 'like' ? 'right' : 'left');
 
-    setTimeout(() => {
-      const match = dataService.swipe(currentUser.id, action);
-      
+    // Optimistic UI update
+    setTimeout(async () => {
       setDirection(null);
       setCurrentIndex(prev => prev + 1);
 
-      if (match) {
-        onMatch(match);
+      try {
+        const match = await dataService.swipe(targetUser.id, action);
+        if (match) {
+          onMatch(match);
+        }
+      } catch (e) {
+        console.error("Swipe failed", e);
       }
-    }, 200); // Wait for animation
+    }, 200); 
   };
 
   const currentProfile = candidates[currentIndex];

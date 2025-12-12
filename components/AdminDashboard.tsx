@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { dataService } from '../services/dataService';
 import { User, UserType } from '../types';
 import { Button } from './Button';
@@ -9,17 +9,26 @@ interface AdminProps {
 }
 
 export const AdminDashboard: React.FC<AdminProps> = ({ onLogout }) => {
-  const [users, setUsers] = useState<User[]>(dataService.getAllUsers());
+  const [users, setUsers] = useState<User[]>([]);
 
-  const handleToggleBlock = (id: string) => {
-    dataService.toggleBlock(id);
-    setUsers(dataService.getAllUsers()); // Refresh
+  const fetchUsers = async () => {
+    const data = await dataService.getAllUsers();
+    setUsers(data);
   };
 
-  const handleDelete = (id: string) => {
+  useEffect(() => {
+    fetchUsers();
+  }, []);
+
+  const handleToggleBlock = async (id: string) => {
+    await dataService.toggleBlock(id);
+    fetchUsers(); // Refresh
+  };
+
+  const handleDelete = async (id: string) => {
     if (confirm("Are you sure you want to delete this user? This cannot be undone.")) {
-      dataService.deleteUser(id);
-      setUsers(dataService.getAllUsers());
+      await dataService.deleteUser(id);
+      fetchUsers();
     }
   };
 

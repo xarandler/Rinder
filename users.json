@@ -1,0 +1,93 @@
+[
+  {
+    "id": "admin",
+    "username": "admin",
+    "password": "pass",
+    "type": "ADMIN",
+    "name": "Administrator",
+    "tagline": "System Admin",
+    "description": "System Administrator",
+    "focusAreas": [],
+    "imageUrl": "https://picsum.photos/200/200",
+    "links": {},
+    "isBlocked": false
+  },
+  {
+    "id": "c1",
+    "username": "nova",
+    "type": "COMPANY",
+    "name": "Nova Dynamics",
+    "tagline": "Building the future of propulsion",
+    "description": "We are a leading aerospace startup looking for breakthroughs in ion propulsion and material heat resistance.",
+    "focusAreas": ["Material Science", "Robotics"],
+    "projects": ["Mars Rover Engine", "Satellite Heat Shield"],
+    "imageUrl": "https://picsum.photos/400/400?random=1",
+    "links": { "website": "https://novadynamics.example.com", "linkedin": "linkedin.com/company/nova" },
+    "isBlocked": false
+  },
+  {
+    "id": "c2",
+    "username": "greenleaf",
+    "type": "COMPANY",
+    "name": "GreenLeaf Bio",
+    "tagline": "Sustainable agriculture for all",
+    "description": "Focused on genetic modifications for drought-resistant crops and soil regeneration techniques.",
+    "focusAreas": ["Biotechnology", "Climate Science"],
+    "projects": ["Drought Rice V2", "Soil Bacteria Analysis"],
+    "imageUrl": "https://picsum.photos/400/400?random=2",
+    "links": { "website": "https://greenleaf.example.com" },
+    "isBlocked": false
+  },
+  {
+    "id": "c3",
+    "username": "quantum",
+    "type": "COMPANY",
+    "name": "Q-State Financial",
+    "tagline": "Next-gen algorithmic trading",
+    "description": "Applying quantum algorithms to financial market prediction and risk analysis.",
+    "focusAreas": ["Quantum Computing", "Economics", "Artificial Intelligence"],
+    "projects": ["High Frequency Trader AI"],
+    "imageUrl": "https://picsum.photos/400/400?random=3",
+    "links": { "website": "https://qstate.example.com" },
+    "isBlocked": false
+  },
+  {
+    "id": "r1",
+    "username": "alice",
+    "type": "RESEARCHER",
+    "name": "Dr. Alice Chen",
+    "tagline": "PhD in Molecular Biology",
+    "description": "Passionate about plant genetics and sustainable ecosystems. 10 years experience in gene editing.",
+    "focusAreas": ["Biotechnology", "Climate Science"],
+    "skills": ["CRISPR", "Data Analysis", "Field Work"],
+    "imageUrl": "https://picsum.photos/400/400?random=4",
+    "links": { "linkedin": "linkedin.com/in/alicechen", "universityProfile": "uni.edu/achen" },
+    "isBlocked": false
+  },
+  {
+    "id": "r2",
+    "username": "bob",
+    "type": "RESEARCHER",
+    "name": "Prof. Robert Smith",
+    "tagline": "Expert in Nanomaterials",
+    "description": "Looking for industrial partners to test new graphene-based composites.",
+    "focusAreas": ["Material Science", "Robotics"],
+    "skills": ["Electron Microscopy", "Chemical Synthesis"],
+    "imageUrl": "https://picsum.photos/400/400?random=5",
+    "links": { "website": "https://bobsmith-research.com" },
+    "isBlocked": false
+  },
+  {
+    "id": "r3",
+    "username": "elena",
+    "type": "RESEARCHER",
+    "name": "Elena Rostova",
+    "tagline": "AI & Ethics Researcher",
+    "description": "Investigating the intersection of large language models and economic policy.",
+    "focusAreas": ["Artificial Intelligence", "Economics"],
+    "skills": ["Python", "TensorFlow", "Policy Analysis"],
+    "imageUrl": "https://picsum.photos/400/400?random=6",
+    "links": { "twitter": "@elenai" },
+    "isBlocked": false
+  }
+]

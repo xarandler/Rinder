@@ -37,6 +37,11 @@ class DataService {
       .eq('username', username)
       .single();
 
+    if (error) {
+      console.error("Supabase Login Error:", error.message);
+      // If table doesn't exist or connection fails, return null
+    }
+
     if (error || !data) return null;
     
     // Check block status
@@ -72,7 +77,10 @@ class DataService {
       .select()
       .single();
 
-    if (error) throw error;
+    if (error) {
+      console.error("Supabase Register Error:", error.message);
+      throw error;
+    }
 
     const newUser = mapUser(data);
     this.currentUser = newUser;
@@ -93,10 +101,15 @@ class DataService {
     if (!this.currentUser) return [];
 
     // 1. Get IDs I have already swiped
-    const { data: swipes } = await supabase
+    const { data: swipes, error: swipeError } = await supabase
       .from('swipes')
       .select('target_id')
       .eq('actor_id', this.currentUser.id);
+
+    if (swipeError) {
+      console.error("Error fetching swipes:", swipeError.message);
+      return [];
+    }
 
     const swipedIds = swipes?.map(s => s.target_id) || [];
     swipedIds.push(this.currentUser.id); // Exclude self
@@ -124,7 +137,10 @@ class DataService {
 
     // 4. Execute to get candidates
     const { data: candidates, error } = await query;
-    if (error) return [];
+    if (error) {
+      console.error("Error fetching potentials:", error.message);
+      return [];
+    }
 
     let results = candidates.map(mapUser);
 
@@ -144,11 +160,13 @@ class DataService {
     if (!this.currentUser) return null;
 
     // 1. Record Swipe
-    await supabase.from('swipes').insert({
+    const { error: swipeError } = await supabase.from('swipes').insert({
       actor_id: this.currentUser.id,
       target_id: targetId,
       action: action
     });
+
+    if (swipeError) console.error("Error recording swipe:", swipeError.message);
 
     if (action === 'pass') return null;
 
@@ -196,7 +214,10 @@ class DataService {
       .select('*')
       .or(`user1_id.eq.${this.currentUser.id},user2_id.eq.${this.currentUser.id}`);
 
-    if (error || !matches) return [];
+    if (error || !matches) {
+        console.error("Error fetching matches:", error?.message);
+        return [];
+    }
 
     const results: { match: Match, otherUser: User }[] = [];
 

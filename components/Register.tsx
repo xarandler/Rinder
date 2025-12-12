@@ -14,6 +14,7 @@ interface RegisterProps {
 export const Register: React.FC<RegisterProps> = ({ onSuccess, onCancel }) => {
   const [step, setStep] = useState(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [errorMsg, setErrorMsg] = useState('');
   const [formData, setFormData] = useState<Partial<User>>({
     type: UserType.COMPANY,
     focusAreas: [],
@@ -22,6 +23,7 @@ export const Register: React.FC<RegisterProps> = ({ onSuccess, onCancel }) => {
 
   const handleChange = (field: keyof User, value: any) => {
     setFormData(prev => ({ ...prev, [field]: value }));
+    setErrorMsg(''); // Clear error on edit
   };
 
   const handleLinkChange = (key: string, value: string) => {
@@ -43,6 +45,7 @@ export const Register: React.FC<RegisterProps> = ({ onSuccess, onCancel }) => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isSubmitting) return;
+    setErrorMsg('');
 
     try {
         setIsSubmitting(true);
@@ -51,8 +54,8 @@ export const Register: React.FC<RegisterProps> = ({ onSuccess, onCancel }) => {
         
         // Add random image if not provided
         const img = formData.type === UserType.COMPANY 
-            ? `https://picsum.photos/400/400?random=${Date.now()}`
-            : `https://picsum.photos/400/400?random=${Date.now()}`;
+            ? `https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?w=400&h=400&fit=crop`
+            : `https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=400&h=400&fit=crop`;
         
         await dataService.register({
             ...formData as any,
@@ -61,8 +64,9 @@ export const Register: React.FC<RegisterProps> = ({ onSuccess, onCancel }) => {
             skills: formData.skills ? (formData.skills as any).split(',').map((s:string)=>s.trim()) : [],
         });
         onSuccess();
-    } catch (err) {
-        alert("Registration failed. Username might be taken.");
+    } catch (err: any) {
+        console.error("Registration failed", err);
+        setErrorMsg(err.message || "Registration failed. Please check your connection.");
         setIsSubmitting(false);
     }
   };
@@ -71,6 +75,12 @@ export const Register: React.FC<RegisterProps> = ({ onSuccess, onCancel }) => {
     <div className="max-w-2xl mx-auto bg-white p-8 rounded-3xl shadow-xl border border-slate-100 my-8">
       <h2 className="text-2xl font-bold text-slate-900 mb-6 text-center">Create Account</h2>
       
+      {errorMsg && (
+        <div className="mb-4 p-4 bg-red-50 text-red-600 rounded-lg border border-red-100 text-sm">
+          {errorMsg}
+        </div>
+      )}
+
       {step === 1 && (
         <div className="space-y-6">
             <div className="flex gap-4 justify-center mb-8">
@@ -115,6 +125,7 @@ export const Register: React.FC<RegisterProps> = ({ onSuccess, onCancel }) => {
 
             <Button fullWidth onClick={() => {
                 if (formData.username && formData.password) setStep(2);
+                else setErrorMsg("Please fill in username and password");
             }}>Next</Button>
             <Button variant="ghost" fullWidth onClick={onCancel} className="mt-2">Cancel</Button>
         </div>
